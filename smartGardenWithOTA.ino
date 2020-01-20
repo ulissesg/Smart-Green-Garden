@@ -39,7 +39,7 @@ Adafruit_MQTT_Subscribe _rele = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/fe
 
 Adafruit_MQTT_Publish _relePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Pump", MQTT_QOS_1);
 
-//Adafruit_MQTT_Publish sensorHumidade = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/humidity", MQTT_QOS_1);
+Adafruit_MQTT_Publish Hora = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Hora", MQTT_QOS_1);
  
 Adafruit_MQTT_Publish umidade_graph = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/humidity_graph", MQTT_QOS_1);
 /* Observe em ambas declarações acima a composição do tópico mqtt
@@ -58,11 +58,12 @@ void conectar_broker();
 float LeituraUmidade();
 void imprime_dia_da_semana(int dia);
 void imprimeDataHora ();
+String hora ();
 
 /*************************** Sketch ************************************/
 
 void setup() {
-//  myRTC.setDS1302Time(00, 37, 16, 2, 30, 12, 2019);
+//  myRTC.setDS1302Time(00, 32, 16, 2, 20, 01, 2020);
   initSerial();
   initPins();
   initWiFi();
@@ -80,15 +81,14 @@ void loop() {
   }
 
   int umidade = LeituraUmidade();
+  imprimeDataHora ();
 
   if (WiFi.status() == WL_CONNECTED){
-//    sensorHumidade.publish(umidade);
+    Hora.publish(myRTC.hours);
     umidade_graph.publish(umidade);
   }
-
-  imprimeDataHora ();
   
-  delay(10000);
+  delay(5000);
 }
 
 /*************************** Implementação dos Prototypes ************************************/
@@ -145,11 +145,11 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-  // ArduinoOTA.setPassword("admin");
+   ArduinoOTA.setPassword("01042017");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+//   ArduinoOTA.setPasswordHash("01042017");
 
   ArduinoOTA.onStart([]() {
     String type;
@@ -202,7 +202,7 @@ void rele_callback(char *data, uint16_t len) {
     digitalWrite(rele01, LOW);
     digitalWrite(rele02, LOW);
     Serial.print("Bomba: "); Serial.println(state);
-//    delay(10 * 60000);
+    delay(15000);
     
   } else if(state == "OFF") {
     digitalWrite(rele01, HIGH);
@@ -245,8 +245,8 @@ void conectar_broker() {
 
 float LeituraUmidade() {
 
-  int umidadeLiga = 60;
-  int umidadeDesliga = 70;
+  int umidadeLiga = 55;
+  int umidadeDesliga = 60;
   
   int pinoSensorUmidade1 = 0;
   int pinoSensorUmidade2 = 1;
@@ -298,23 +298,27 @@ void imprimeDataHora (){
   Serial.print(myRTC.year);
   Serial.print("  ");
   Serial.print("Hora : ");
-  //Adiciona um 0 caso o valor da hora seja <10
+  Serial.print(hora());
+}
+
+String hora (){
+  String hora;
+  myRTC.updateTime(); 
   if (myRTC.hours < 10){
-    Serial.print("0");
+    hora = "0";
   }
-  Serial.print(myRTC.hours);
-  Serial.print(":");
+  hora = hora + myRTC.hours + " : ";
   //Adiciona um 0 caso o valor dos minutos seja <10
   if (myRTC.minutes < 10){
-    Serial.print("0");
+    hora = hora  + "0"; 
   }
-  Serial.print(myRTC.minutes);
-  Serial.print(":");
+  hora = hora + myRTC.minutes + " : ";
   //Adiciona um 0 caso o valor dos segundos seja <10
   if (myRTC.seconds < 10){
-    Serial.print("0");
+    hora  = hora + "0";
   }
-  Serial.println(myRTC.seconds);
+  hora =  hora + myRTC.seconds;
+  return hora;
 }
 
 
