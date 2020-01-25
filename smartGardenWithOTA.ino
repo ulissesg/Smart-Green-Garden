@@ -11,14 +11,14 @@
 /************************* Conexão WiFi*********************************/
 
 #define WIFI_SSID       "Genguini's house" // nome de sua rede wifi
-#define WIFI_PASS       "01042017"     // senha de sua rede wifi
+#define WIFI_PASS       ""     // senha de sua rede wifi
 
 /********************* Credenciais Adafruit io *************************/
 
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883
 #define AIO_USERNAME    "ulissesg" // Seu usuario cadastrado na plataforma da Adafruit
-#define AIO_KEY         "daf0fe66e7be4af19b34523241d1a66c"       // Sua key da dashboard
+#define AIO_KEY         ""       // Sua key da dashboard
 
 /********************** Variaveis globais *******************************/
 
@@ -186,11 +186,11 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-   ArduinoOTA.setPassword("01042017");
+   ArduinoOTA.setPassword("");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-//   ArduinoOTA.setPasswordHash("01042017");
+//   ArduinoOTA.setPasswordHash("");
 
   ArduinoOTA.onStart([]() {
     String type;
