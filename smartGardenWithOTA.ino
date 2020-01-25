@@ -31,8 +31,8 @@ Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO
 int rele01 = 16; // pino do rele
 int rele02 = 5;
 
-int umidadeLiga = 10;
-int umidadeDesliga = 60;
+int umidadeLiga = 60;
+int umidadeDesliga = 70;
 
 int horaOn = 6;
 int horaOff = 17;
@@ -80,7 +80,7 @@ void releControlTime();
 /*************************** Sketch ************************************/
 
 void setup() {
-//  myRTC.setDS1302Time(00, 40, 19, 5, 23, 01, 2020);
+//  myRTC.setDS1302Time(00, 48, 10, 6, 24, 01, 2020);
   initSerial();
   initEEPROM();
   initPins();
@@ -115,11 +115,11 @@ void loop() {
     Hora.publish(myRTC.hours);
     umidade_graph.publish(umidade);
     
-    if (modo == 0){
-      ModePub.publish("Humi");
-    }else if (modo == 1){
-      ModePub.publish("Time");
-    }
+//    if (modo == 0){
+//      ModePub.publish("Humi");
+//    }else if (modo == 1){
+//      ModePub.publish("Time");
+//    }
   }
   
   delay(5000);
@@ -193,7 +193,7 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-   ArduinoOTA.setPassword("01042017");
+//   ArduinoOTA.setPassword("01042017");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
@@ -269,6 +269,7 @@ void mode_callback(char *data, uint16_t len){
     EEPROM.write(0, 1);
     EEPROM.commit();
     EEPROM.end();
+    lastOnPump = NULL;
 
   }else if (state == "Humi"){
     EEPROM.begin(4);
@@ -351,12 +352,14 @@ void releControlHumidity(int UmidadePercentual){
 
 /* liga e desliga a bomba a cada 1 hora */
 void releControlTime(){
-  if (lastOnPump == NULL && myRTC.hours > horaOn && myRTC.hours < horaOff){
-    onOffPump();
-  } else if (lastOnPump < myRTC.hours && myRTC.hours > horaOn && myRTC.hours <= horaOff){
-    onOffPump();
-  }else if (lastOnPump == horaOff && myRTC.hours == horaOn){
-    onOffPump();
+  if (myRTC.hours > horaOn && myRTC.hours <= horaOff){
+    if (lastOnPump == NULL){
+      onOffPump();
+    } else if (lastOnPump < myRTC.hours){
+      onOffPump();
+    }else if (lastOnPump == horaOff && myRTC.hours == horaOn){
+      onOffPump();
+    }
   }
   
 }
