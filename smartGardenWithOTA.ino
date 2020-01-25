@@ -6,6 +6,7 @@
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <EEPROM.h>
 
 /************************* Conexão WiFi*********************************/
 
@@ -30,12 +31,28 @@ Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO
 int rele01 = 16; // pino do rele
 int rele02 = 5;
 
+int umidadeLiga = 60;
+int umidadeDesliga = 70;
+
+int horaOn = 6;
+int horaOff = 17;
+
+int modo;
+
+int delayTimeMode = 3 * 60000;
+
+int lastOnPump = NULL;
+
 long previousMillis = 0;
 
 /****************************** Declaração dos Feeds ***************************************/
 
 /* feed responsavel por receber os dados da nossa dashboard */
 Adafruit_MQTT_Subscribe _rele = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/Pump", MQTT_QOS_1);
+
+Adafruit_MQTT_Subscribe Mode = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/mode", MQTT_QOS_1);
+
+Adafruit_MQTT_Publish ModePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/mode", MQTT_QOS_1);
 
 Adafruit_MQTT_Publish _relePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Pump", MQTT_QOS_1);
 
@@ -51,20 +68,21 @@ Adafruit_MQTT_Publish umidade_graph = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME 
 
 void initSerial();
 void initPins();
+void initEEPROM();
 void initWiFi();
 void OTAInit();
 void initMQTT();
 void conectar_broker();
 float LeituraUmidade();
-void imprime_dia_da_semana(int dia);
-void imprimeDataHora ();
-String hora ();
+void releControlHumidity(int UmidadePercentual);
+void releControlTime();
 
 /*************************** Sketch ************************************/
 
 void setup() {
-//  myRTC.setDS1302Time(00, 32, 16, 2, 20, 01, 2020);
+//  myRTC.setDS1302Time(00, 48, 10, 6, 24, 01, 2020);
   initSerial();
+  initEEPROM();
   initPins();
   initWiFi();
   if (WiFi.status() == WL_CONNECTED){
@@ -73,19 +91,35 @@ void setup() {
 }
 
 void loop() {
-
+  
   if (WiFi.status() == WL_CONNECTED){
     ArduinoOTA.handle();
-    conectar_broker();
+    conectar_broker();    
     mqtt.processPackets(5000);
   }
 
+  EEPROM.begin(4);
+  modo = EEPROM.read(0);// valor no endereço 0 novamente.
+  EEPROM.end();//Fecha a EEPROM.
+
   int umidade = LeituraUmidade();
-  imprimeDataHora ();
+
+  if (modo == 0){
+    releControlHumidity(umidade);
+  }else if(modo == 1){
+    releControlTime();
+  }
 
   if (WiFi.status() == WL_CONNECTED){
+    myRTC.updateTime(); 
     Hora.publish(myRTC.hours);
     umidade_graph.publish(umidade);
+    
+//    if (modo == 0){
+//      ModePub.publish("Humi");
+//    }else if (modo == 1){
+//      ModePub.publish("Time");
+//    }
   }
   
   delay(5000);
@@ -100,13 +134,27 @@ void initSerial() {
   Serial.println("Booting");
 }
 
+/* inicializacao da EEPROM */
+
+void initEEPROM(){
+ EEPROM.begin(4);
+// EEPROM.write(0,0);
+ modo = EEPROM.read(0);// valor no endereço 0 novamente.
+ EEPROM.end();//Fecha a EEPROM.
+}
+
 /* Configuração dos pinos */
 void initPins() {
+
   pinMode(rele01, OUTPUT);
   digitalWrite(rele01, HIGH);
 
   pinMode(rele02, OUTPUT);
   digitalWrite(rele02, HIGH);
+
+  pinMode(4, INPUT);
+  pinMode(0, INPUT);
+  pinMode(2, INPUT);
 }
 
 /* Configuração da conexão WiFi */
@@ -128,7 +176,7 @@ void initWiFi() {
     OTAInit();
     Serial.println("Conectado à rede com sucesso"); Serial.println("Endereço IP: "); Serial.println(WiFi.localIP());
   }else{
-      Serial.println("Não foi possivel conectar a internet");
+      Serial.println("Não foi possivel conectar ao roteador");
       ESP.restart();
   }
 
@@ -145,7 +193,7 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-   ArduinoOTA.setPassword("01042017");
+//   ArduinoOTA.setPassword("01042017");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
@@ -190,6 +238,8 @@ void OTAInit(){
 void initMQTT() {
   _rele.setCallback(rele_callback);
   mqtt.subscribe(&_rele);
+  Mode.setCallback(mode_callback);
+  mqtt.subscribe(&Mode);
 }
 
 /*************************** Implementação dos Callbacks ************************************/
@@ -202,15 +252,32 @@ void rele_callback(char *data, uint16_t len) {
     digitalWrite(rele01, LOW);
     digitalWrite(rele02, LOW);
     Serial.print("Bomba: "); Serial.println(state);
-    delay(15000);
     
   } else if(state == "OFF") {
     digitalWrite(rele01, HIGH);
     digitalWrite(rele02, HIGH);
     Serial.print("Bomba: "); Serial.println(state);
-//    delay(30000);
   }
 
+}
+
+void mode_callback(char *data, uint16_t len){
+  String state = data;
+
+  if (state == "Time"){
+    EEPROM.begin(4);
+    EEPROM.write(0, 1);
+    EEPROM.commit();
+    EEPROM.end();
+    lastOnPump = NULL;
+
+  }else if (state == "Humi"){
+    EEPROM.begin(4);
+    EEPROM.write(0, 0);
+    EEPROM.commit();
+    EEPROM.end();
+  }
+  
 }
 
 /*************************** Demais implementações ************************************/
@@ -244,9 +311,6 @@ void conectar_broker() {
 /* leitura do sensor de humidade */
 
 float LeituraUmidade() {
-
-  int umidadeLiga = 55;
-  int umidadeDesliga = 60;
   
   int pinoSensorUmidade1 = 0;
   int pinoSensorUmidade2 = 1;
@@ -264,8 +328,14 @@ float LeituraUmidade() {
   Serial.println("%"); //IMPRIME O CARACTERE NO MONITOR SERIAL
   Serial.print("Leitura Sensor:");
   Serial.println(analogRead(pinoSensorUmidade1));
-  
-  if (UmidadePercentual <= umidadeLiga && myRTC.hours > 6 && myRTC.hours < 17){
+
+  return UmidadePercentual;
+}
+
+/* liga e desliga o rele de acordo com a umidade */
+
+void releControlHumidity(int UmidadePercentual){
+    if (UmidadePercentual <= umidadeLiga && myRTC.hours > horaOn && myRTC.hours < horaOff){
     digitalWrite(rele01, LOW);
     digitalWrite(rele02, LOW);
     if (WiFi.status() == WL_CONNECTED){
@@ -278,74 +348,36 @@ float LeituraUmidade() {
       _relePub.publish("OFF");      
     }
   }
-
-  return UmidadePercentual;
 }
 
-/* imprime hora e data */
-
-void imprimeDataHora (){
-  myRTC.updateTime(); 
-  //Imprime as informacoes no serial monitor
-  Serial.print("\nData : ");
-  //Chama a rotina que imprime o dia da semana
-  imprime_dia_da_semana(myRTC.dayofweek);
-  Serial.print(", ");
-  Serial.print(myRTC.dayofmonth);
-  Serial.print("/");
-  Serial.print(myRTC.month);
-  Serial.print("/");
-  Serial.print(myRTC.year);
-  Serial.print("  ");
-  Serial.print("Hora : ");
-  Serial.print(hora());
+/* liga e desliga a bomba a cada 1 hora */
+void releControlTime(){
+  if (myRTC.hours > horaOn && myRTC.hours <= horaOff){
+    if (lastOnPump == NULL){
+      onOffPump();
+    } else if (lastOnPump < myRTC.hours){
+      onOffPump();
+    }else if (lastOnPump == horaOff && myRTC.hours == horaOn){
+      onOffPump();
+    }
+  }
+  
 }
 
-String hora (){
-  String hora;
-  myRTC.updateTime(); 
-  if (myRTC.hours < 10){
-    hora = "0";
+void onOffPump(){
+  digitalWrite(rele01, LOW);
+  digitalWrite(rele02, LOW);
+  if (WiFi.status() == WL_CONNECTED){
+    _relePub.publish("ON");
   }
-  hora = hora + myRTC.hours + " : ";
-  //Adiciona um 0 caso o valor dos minutos seja <10
-  if (myRTC.minutes < 10){
-    hora = hora  + "0"; 
-  }
-  hora = hora + myRTC.minutes + " : ";
-  //Adiciona um 0 caso o valor dos segundos seja <10
-  if (myRTC.seconds < 10){
-    hora  = hora + "0";
-  }
-  hora =  hora + myRTC.seconds;
-  return hora;
-}
 
-
-/* imprime dia da semana */
-
-void imprime_dia_da_semana(int dia){
-  switch (dia){
-    case 1:
-      Serial.print("Domingo");
-      break;
-    case 2:
-      Serial.print("Segunda");
-      break;
-    case 3:
-      Serial.print("Terca");
-      break;
-    case 4:
-      Serial.print("Quarta");
-      break;
-    case 5:
-      Serial.print("Quinta");
-      break;
-    case 6:
-      Serial.print("Sexta");
-      break;
-    case 7:
-      Serial.print("Sabado");
-      break;
+  delay(delayTimeMode);
+  
+  digitalWrite(rele01, HIGH);
+  digitalWrite(rele02, HIGH);
+  if (WiFi.status() == WL_CONNECTED){
+    _relePub.publish("OFF");      
   }
+  
+  lastOnPump = myRTC.hours;
 }
