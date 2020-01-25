@@ -1,28 +1,29 @@
 /************************* Inclusão das Bibliotecas *********************************/
 #include "ESP8266WiFi.h"
 #include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
-#include <virtuabotixRTC.h>  
+#include "Adafruit_MQTT_Client.h" 
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <EEPROM.h>
+#include <NTPClient.h>
 
 /************************* Conexão WiFi*********************************/
 
 #define WIFI_SSID       "Genguini's house" // nome de sua rede wifi
-#define WIFI_PASS       ""     // senha de sua rede wifi
+#define WIFI_PASS       "01042017"     // senha de sua rede wifi
 
 /********************* Credenciais Adafruit io *************************/
 
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883
 #define AIO_USERNAME    "ulissesg" // Seu usuario cadastrado na plataforma da Adafruit
-#define AIO_KEY         ""       // Sua key da dashboard
+#define AIO_KEY         "daf0fe66e7be4af19b34523241d1a66c"       // Sua key da dashboard
 
 /********************** Variaveis globais *******************************/
 
-virtuabotixRTC myRTC(4, 0, 2);
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "a.st1.ntp.br", -3 * 3600, 60000);
 
 WiFiClient client;
 
@@ -31,7 +32,7 @@ Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO
 int rele01 = 16; // pino do rele
 int rele02 = 5;
 
-int umidadeLiga = 60;
+int umidadeLiga = 55;
 int umidadeDesliga = 70;
 
 int horaOn = 6;
@@ -80,27 +81,27 @@ void releControlTime();
 /*************************** Sketch ************************************/
 
 void setup() {
-//  myRTC.setDS1302Time(00, 48, 10, 6, 24, 01, 2020);
   initSerial();
   initEEPROM();
   initPins();
   initWiFi();
-  if (WiFi.status() == WL_CONNECTED){
-      initMQTT();
-  }
+  initMQTT();
+  timeClient.begin();
 }
 
 void loop() {
   
-  if (WiFi.status() == WL_CONNECTED){
-    ArduinoOTA.handle();
-    conectar_broker();    
-    mqtt.processPackets(5000);
-  }
+
+  ArduinoOTA.handle();
+  conectar_broker();    
+  mqtt.processPackets(5000);
+
 
   EEPROM.begin(4);
   modo = EEPROM.read(0);// valor no endereço 0 novamente.
   EEPROM.end();//Fecha a EEPROM.
+
+  timeClient.update();
 
   int umidade = LeituraUmidade();
 
@@ -109,18 +110,10 @@ void loop() {
   }else if(modo == 1){
     releControlTime();
   }
-
-  if (WiFi.status() == WL_CONNECTED){
-    myRTC.updateTime(); 
-    Hora.publish(myRTC.hours);
-    umidade_graph.publish(umidade);
-    
-//    if (modo == 0){
-//      ModePub.publish("Humi");
-//    }else if (modo == 1){
-//      ModePub.publish("Time");
-//    }
-  }
+  
+  
+  Hora.publish(timeClient.getHours());
+  umidade_graph.publish(umidade);
   
   delay(5000);
 }
@@ -193,11 +186,11 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-//   ArduinoOTA.setPassword("");
+   ArduinoOTA.setPassword("01042017");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-//   ArduinoOTA.setPasswordHash("");
+//   ArduinoOTA.setPasswordHash("01042017");
 
   ArduinoOTA.onStart([]() {
     String type;
@@ -335,29 +328,27 @@ float LeituraUmidade() {
 /* liga e desliga o rele de acordo com a umidade */
 
 void releControlHumidity(int UmidadePercentual){
-    if (UmidadePercentual <= umidadeLiga && myRTC.hours > horaOn && myRTC.hours < horaOff){
+    if (UmidadePercentual <= umidadeLiga && timeClient.getHours() > horaOn && timeClient.getHours() < horaOff){
     digitalWrite(rele01, LOW);
     digitalWrite(rele02, LOW);
-    if (WiFi.status() == WL_CONNECTED){
-      _relePub.publish("ON");
-    }
+    _relePub.publish("ON");
+    
   }else if (UmidadePercentual >= umidadeDesliga){
     digitalWrite(rele01, HIGH);
     digitalWrite(rele02, HIGH);
-    if (WiFi.status() == WL_CONNECTED){
-      _relePub.publish("OFF");      
-    }
+    _relePub.publish("OFF");      
+
   }
 }
 
 /* liga e desliga a bomba a cada 1 hora */
 void releControlTime(){
-  if (myRTC.hours > horaOn && myRTC.hours <= horaOff){
+  if (timeClient.getHours() > horaOn && timeClient.getHours() <= horaOff){
     if (lastOnPump == NULL){
       onOffPump();
-    } else if (lastOnPump < myRTC.hours){
+    } else if (lastOnPump < timeClient.getHours()){
       onOffPump();
-    }else if (lastOnPump == horaOff && myRTC.hours == horaOn){
+    }else if (lastOnPump == horaOff && timeClient.getHours() == horaOn){
       onOffPump();
     }
   }
@@ -367,17 +358,14 @@ void releControlTime(){
 void onOffPump(){
   digitalWrite(rele01, LOW);
   digitalWrite(rele02, LOW);
-  if (WiFi.status() == WL_CONNECTED){
-    _relePub.publish("ON");
-  }
+  _relePub.publish("ON");
 
   delay(delayTimeMode);
   
   digitalWrite(rele01, HIGH);
   digitalWrite(rele02, HIGH);
-  if (WiFi.status() == WL_CONNECTED){
-    _relePub.publish("OFF");      
-  }
+  _relePub.publish("OFF");      
+
   
-  lastOnPump = myRTC.hours;
+  lastOnPump = timeClient.getHours();
 }
