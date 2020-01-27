@@ -17,7 +17,7 @@
 
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883
-#define AIO_USERNAME    "ulissesg" // Seu usuario cadastrado na plataforma da Adafruit
+#define AIO_USERNAME    "" // Seu usuario cadastrado na plataforma da Adafruit
 #define AIO_KEY         ""       // Sua key da dashboard
 
 /********************** Variaveis globais *******************************/
