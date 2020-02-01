@@ -11,14 +11,14 @@
 /************************* Conexão WiFi*********************************/
 
 #define WIFI_SSID       "Genguini's house" // nome de sua rede wifi
-#define WIFI_PASS       ""     // senha de sua rede wifi
+#define WIFI_PASS       "01042017"     // senha de sua rede wifi
 
 /********************* Credenciais Adafruit io *************************/
 
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883
-#define AIO_USERNAME    "" // Seu usuario cadastrado na plataforma da Adafruit
-#define AIO_KEY         ""       // Sua key da dashboard
+#define AIO_USERNAME    "ulissesg" // Seu usuario cadastrado na plataforma da Adafruit
+#define AIO_KEY         "daf0fe66e7be4af19b34523241d1a66c"       // Sua key da dashboard
 
 /********************** Variaveis globais *******************************/
 
@@ -32,8 +32,8 @@ Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO
 int rele01 = 16; // pino do rele
 int rele02 = 5;
 
-int umidadeLiga = 60;
-int umidadeDesliga = 65;
+int umidadeLiga = 92;
+int umidadeDesliga = 96;
 
 int horaOn = 6;
 int horaOff = 17;
@@ -56,8 +56,6 @@ Adafruit_MQTT_Subscribe Mode = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/fee
 Adafruit_MQTT_Publish ModePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/mode", MQTT_QOS_1);
 
 Adafruit_MQTT_Publish _relePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Pump", MQTT_QOS_1);
-
-Adafruit_MQTT_Publish Hora = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Hora", MQTT_QOS_1);
  
 Adafruit_MQTT_Publish umidade_graph = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/humidity_graph", MQTT_QOS_1);
 /* Observe em ambas declarações acima a composição do tópico mqtt
@@ -110,7 +108,7 @@ void loop() {
   }else if(modo == 1){
     releControlTime();
   }
-  .
+  
   umidade_graph.publish(umidade);
   
   delay(5000);
@@ -184,11 +182,11 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-   ArduinoOTA.setPassword("");
+   ArduinoOTA.setPassword("01042017");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-//   ArduinoOTA.setPasswordHash("");
+//   ArduinoOTA.setPasswordHash("01042017");
 
   ArduinoOTA.onStart([]() {
     String type;
@@ -242,12 +240,10 @@ void rele_callback(char *data, uint16_t len) {
   if (state == "ON") {
     digitalWrite(rele01, LOW);
     digitalWrite(rele02, LOW);
-    Serial.print("Bomba: "); Serial.println(state);
     
   } else if(state == "OFF") {
     digitalWrite(rele01, HIGH);
     digitalWrite(rele02, HIGH);
-    Serial.print("Bomba: "); Serial.println(state);
   }
 
 }
@@ -303,8 +299,7 @@ void conectar_broker() {
 
 float LeituraUmidade() {
   
-  int pinoSensorUmidade1 = 0;
-  int pinoSensorUmidade2 = 1;
+  int pinoSensorUmidade = 0;
 
   float UmidadePercentual;
   int analogSoloSeco = 1024; 
@@ -312,13 +307,7 @@ float LeituraUmidade() {
   int percSoloSeco = 0; 
   int percSoloMolhado = 100; 
 
-  UmidadePercentual = constrain(analogRead(pinoSensorUmidade1),analogSoloMolhado,analogSoloSeco); //MANTÉM valorLido DENTRO DO INTERVALO (ENTRE analogSoloMolhado E analogSoloSeco)
-  UmidadePercentual = map(UmidadePercentual,analogSoloMolhado,analogSoloSeco,percSoloMolhado,percSoloSeco); //EXECUTA A FUNÇÃO "map" DE ACORDO COM OS PARÂMETROS PASSADOS
-  Serial.print("Umidade do solo: "); //IMPRIME O TEXTO NO MONITOR SERIAL
-  Serial.print(UmidadePercentual); //IMPRIME NO MONITOR SERIAL O PERCENTUAL DE UMIDADE DO SOLO
-  Serial.println("%"); //IMPRIME O CARACTERE NO MONITOR SERIAL
-  Serial.print("Leitura Sensor:");
-  Serial.println(analogRead(pinoSensorUmidade1));
+  UmidadePercentual = map(analogRead(pinoSensorUmidade),analogSoloMolhado,analogSoloSeco,percSoloSeco,percSoloMolhado); //EXECUTA A FUNÇÃO "map" DE ACORDO COM OS PARÂMETROS PASSADOS
 
   return UmidadePercentual;
 }
