@@ -11,14 +11,14 @@
 /************************* Conexão WiFi*********************************/
 
 #define WIFI_SSID       "Genguini's house" // nome de sua rede wifi
-#define WIFI_PASS       ""     // senha de sua rede wifi
+#define WIFI_PASS       "01042017"     // senha de sua rede wifi
 
 /********************* Credenciais Adafruit io *************************/
 
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883
 #define AIO_USERNAME    "ulissesg" // Seu usuario cadastrado na plataforma da Adafruit
-#define AIO_KEY         ""       // Sua key da dashboard
+#define AIO_KEY         "daf0fe66e7be4af19b34523241d1a66c"       // Sua key da dashboard
 
 /********************** Variaveis globais *******************************/
 
@@ -141,9 +141,6 @@ void initPins() {
   pinMode(rele02, OUTPUT);
   digitalWrite(rele02, HIGH);
 
-  pinMode(4, INPUT);
-  pinMode(0, INPUT);
-  pinMode(2, INPUT);
 }
 
 /* Configuração da conexão WiFi */
@@ -182,11 +179,11 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-   ArduinoOTA.setPassword("");
+   ArduinoOTA.setPassword("01042017");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-//   ArduinoOTA.setPasswordHash("");
+//   ArduinoOTA.setPasswordHash("01042017");
 
   ArduinoOTA.onStart([]() {
     String type;
@@ -316,15 +313,10 @@ float LeituraUmidade() {
 
 void releControlHumidity(int UmidadePercentual){
     if (UmidadePercentual <= umidadeLiga && timeClient.getHours() > horaOn && timeClient.getHours() < horaOff){
-    digitalWrite(rele01, LOW);
-    digitalWrite(rele02, LOW);
-    _relePub.publish("ON");
+    pumpOn();
     
   }else if (UmidadePercentual >= umidadeDesliga){
-    digitalWrite(rele01, HIGH);
-    digitalWrite(rele02, HIGH);
-    _relePub.publish("OFF");      
-
+    pumpOff();
   }
 }
 
@@ -343,16 +335,23 @@ void releControlTime(){
 }
 
 void onOffPump(){
-  digitalWrite(rele01, LOW);
-  digitalWrite(rele02, LOW);
-  _relePub.publish("ON");
+  pumpOn();
 
   delay(delayTimeMode);
   
-  digitalWrite(rele01, HIGH);
-  digitalWrite(rele02, HIGH);
-  _relePub.publish("OFF");      
-
+  pumpOff();     
   
   lastOnPump = timeClient.getHours();
+}
+
+void pumpOn(){
+  digitalWrite(rele01, LOW);
+  digitalWrite(rele02, LOW);
+  _relePub.publish("ON");
+}
+
+void pumpOff(){
+  digitalWrite(rele01, HIGH);
+  digitalWrite(rele02, HIGH);
+  _relePub.publish("OFF");  
 }
