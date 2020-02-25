@@ -1,4 +1,5 @@
 /************************* Inclusão das Bibliotecas *********************************/
+#include <stdlib.h>
 #include "ESP8266WiFi.h"
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h" 
@@ -11,14 +12,14 @@
 /************************* Conexão WiFi*********************************/
 
 #define WIFI_SSID       "Genguini's house" // nome de sua rede wifi
-#define WIFI_PASS       ""     // senha de sua rede wifi
+#define WIFI_PASS       "01042017"     // senha de sua rede wifi
 
 /********************* Credenciais Adafruit io *************************/
 
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883
 #define AIO_USERNAME    "ulissesg" // Seu usuario cadastrado na plataforma da Adafruit
-#define AIO_KEY         ""       // Sua key da dashboard
+#define AIO_KEY         "daf0fe66e7be4af19b34523241d1a66c"       // Sua key da dashboard
 
 /********************** Variaveis globais *******************************/
 
@@ -29,18 +30,20 @@ WiFiClient client;
 
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 
+int statusSystem = 1;
+
 int rele01 = 16; // pino do rele
 int rele02 = 5;
 
-int umidadeLiga = 92;
-int umidadeDesliga = 96;
+int umidadeLiga;
+int umidadeDesliga;
 
 int horaOn = 6;
 int horaOff = 17;
 
 int modo;
 
-int delayTimeMode = 3 * 60000;
+int delayTimeMode = 1 * 60000;
 
 int lastOnPump = NULL;
 
@@ -58,6 +61,19 @@ Adafruit_MQTT_Publish ModePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feed
 Adafruit_MQTT_Publish _relePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Pump", MQTT_QOS_1);
  
 Adafruit_MQTT_Publish umidade_graph = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/humidity_graph", MQTT_QOS_1);
+
+Adafruit_MQTT_Publish IOSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/IO", MQTT_QOS_1);
+
+Adafruit_MQTT_Subscribe IO = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/IO", MQTT_QOS_1);
+
+Adafruit_MQTT_Subscribe OnValue = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/OnValue", MQTT_QOS_1);
+
+Adafruit_MQTT_Subscribe OffValue = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/OffValue", MQTT_QOS_1);
+
+Adafruit_MQTT_Publish OnValueSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/OnValue", MQTT_QOS_1);
+
+Adafruit_MQTT_Publish OffValueSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/OffValue", MQTT_QOS_1);
+
 /* Observe em ambas declarações acima a composição do tópico mqtt
   --> AIO_USERNAME "/feeds/mcp9808"
   O mpc9808 será justamente o nome que foi dado la na nossa dashboard, portanto o mesmo nome atribuido la, terá de ser colocado aqui tambem
@@ -96,22 +112,28 @@ void loop() {
 
 
   EEPROM.begin(4);
-  modo = EEPROM.read(0);// valor no endereço 0 novamente.
+  modo = EEPROM.read(0);
+  umidadeLiga = EEPROM.read(1);
+  umidadeDesliga = EEPROM.read(2);
   EEPROM.end();//Fecha a EEPROM.
 
   timeClient.update();
 
   int umidade = LeituraUmidade();
 
-  if (modo == 0){
-    releControlHumidity(umidade);
-  }else if(modo == 1){
-    releControlTime();
+  if (statusSystem == 1){
+     if (modo == 0){
+      releControlHumidity(umidade);
+    }else if(modo == 1){
+      releControlTime();
+    }
   }
-  
+
+  publishStateSystem();
+  OnValueSub.publish(umidadeLiga);
+  OffValueSub.publish(umidadeDesliga);
   umidade_graph.publish(umidade);
-  
-  delay(5000);
+  delay(10000);
 }
 
 /*************************** Implementação dos Prototypes ************************************/
@@ -129,6 +151,8 @@ void initEEPROM(){
  EEPROM.begin(4);
 // EEPROM.write(0,0);
  modo = EEPROM.read(0);// valor no endereço 0 novamente.
+ umidadeLiga = EEPROM.read(1);
+ umidadeDesliga = EEPROM.read(2);
  EEPROM.end();//Fecha a EEPROM.
 }
 
@@ -179,11 +203,11 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-   ArduinoOTA.setPassword("");
+   ArduinoOTA.setPassword("01042017");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-//   ArduinoOTA.setPasswordHash("");
+//   ArduinoOTA.setPasswordHash("01042017");
 
   ArduinoOTA.onStart([]() {
     String type;
@@ -226,6 +250,13 @@ void initMQTT() {
   mqtt.subscribe(&_rele);
   Mode.setCallback(mode_callback);
   mqtt.subscribe(&Mode);
+  IO.setCallback(io_callback);
+  mqtt.subscribe(&IO);
+  OnValue.setCallback(OnValue_callback);
+  mqtt.subscribe(&OnValue);
+  OffValue.setCallback(OffValue_callback);
+  mqtt.subscribe(&OffValue);
+  
 }
 
 /*************************** Implementação dos Callbacks ************************************/
@@ -262,6 +293,35 @@ void mode_callback(char *data, uint16_t len){
     EEPROM.end();
   }
   
+}
+
+void io_callback(char *data, uint16_t len){
+  String state = data;
+
+  if (state == "ON") {
+    statusSystem = 1;
+    
+  } else if(state == "OFF") {
+    statusSystem = 0;
+  }
+}
+
+void OnValue_callback(char *data, uint16_t len){
+  String state = data;
+
+    EEPROM.begin(4);
+    EEPROM.write(1, atoi(state.c_str()));
+    EEPROM.commit();
+    EEPROM.end();  
+}
+
+void OffValue_callback(char *data, uint16_t len){
+  String state = data;
+
+    EEPROM.begin(4);
+    EEPROM.write(2, atoi(state.c_str()));
+    EEPROM.commit();
+    EEPROM.end();  
 }
 
 /*************************** Demais implementações ************************************/
@@ -304,7 +364,7 @@ float LeituraUmidade() {
   int percSoloSeco = 0; 
   int percSoloMolhado = 100; 
 
-  UmidadePercentual = map(analogRead(pinoSensorUmidade),analogSoloMolhado,analogSoloSeco,percSoloSeco,percSoloMolhado); //EXECUTA A FUNÇÃO "map" DE ACORDO COM OS PARÂMETROS PASSADOS
+  UmidadePercentual = map(analogRead(pinoSensorUmidade),analogSoloSeco,analogSoloMolhado,percSoloSeco,percSoloMolhado); //EXECUTA A FUNÇÃO "map" DE ACORDO COM OS PARÂMETROS PASSADOS
 
   return UmidadePercentual;
 }
@@ -320,12 +380,12 @@ void releControlHumidity(int UmidadePercentual){
   }
 }
 
-/* liga e desliga a bomba a cada 1 hora */
+/* liga e desliga a bomba a cada 30 minutos */
 void releControlTime(){
-  if (timeClient.getHours() > horaOn && timeClient.getHours() <= horaOff){
+  if (timeClient.getHours() >= horaOn && timeClient.getHours() <= horaOff){
     if (lastOnPump == NULL){
       onOffPump();
-    } else if (lastOnPump < timeClient.getHours()){
+    } else if (timeClient.getMinutes() == 0 || timeClient.getMinutes() == 30){
       onOffPump();
     }else if (lastOnPump == horaOff && timeClient.getHours() == horaOn){
       onOffPump();
@@ -354,4 +414,13 @@ void pumpOff(){
   digitalWrite(rele01, HIGH);
   digitalWrite(rele02, HIGH);
   _relePub.publish("OFF");  
+}
+
+void publishStateSystem(){
+  if (statusSystem == 1){
+      IOSub.publish("ON");
+  }
+  if (statusSystem == 0){
+      IOSub.publish("OFF");
+  }
 }
