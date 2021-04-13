@@ -12,14 +12,14 @@
 /************************* Conexão WiFi*********************************/
 
 #define WIFI_SSID       "Genguini's house" // nome de sua rede wifi
-#define WIFI_PASS       ""     // senha de sua rede wifi
+#define WIFI_PASS       "01042017"     // senha de sua rede wifi
 
 /********************* Credenciais Adafruit io *************************/
 
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883
-#define AIO_USERNAME    "" // Seu usuario cadastrado na plataforma da Adafruit
-#define AIO_KEY         ""       // Sua key da dashboard
+#define AIO_USERNAME    "ulissesg" // Seu usuario cadastrado na plataforma da Adafruit
+#define AIO_KEY         "daf0fe66e7be4af19b34523241d1a66c"       // Sua key da dashboard
 
 /********************** Variaveis globais *******************************/
 
@@ -43,6 +43,10 @@ int horaOff = 17;
 
 int modo;
 
+int horaLigou = NULL;
+int minutoLigou = NULL;
+int tempoLigado = 0;
+
 int delayTimeMode = 1 * 60000;
 
 int lastOnPump = NULL;
@@ -60,7 +64,7 @@ Adafruit_MQTT_Publish ModePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feed
 
 Adafruit_MQTT_Publish _relePub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Pump", MQTT_QOS_1);
  
-Adafruit_MQTT_Publish umidade_graph = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/humidity_graph", MQTT_QOS_1);
+//Adafruit_MQTT_Publish umidade_graph = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/humidity_graph", MQTT_QOS_1);
 
 Adafruit_MQTT_Publish IOSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/IO", MQTT_QOS_1);
 
@@ -70,9 +74,13 @@ Adafruit_MQTT_Subscribe OnValue = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/
 
 Adafruit_MQTT_Subscribe OffValue = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/OffValue", MQTT_QOS_1);
 
-Adafruit_MQTT_Publish OnValueSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/OnValue", MQTT_QOS_1);
+//Adafruit_MQTT_Publish OnValueSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/OnValue", MQTT_QOS_1);
+//
+//Adafruit_MQTT_Publish OffValueSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/OffValue", MQTT_QOS_1);
 
-Adafruit_MQTT_Publish OffValueSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/OffValue", MQTT_QOS_1);
+Adafruit_MQTT_Publish OnTimeSub = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/OnTime", MQTT_QOS_1);
+
+Adafruit_MQTT_Subscribe OnTime = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/OnTime", MQTT_QOS_1);
 
 /* Observe em ambas declarações acima a composição do tópico mqtt
   --> AIO_USERNAME "/feeds/mcp9808"
@@ -122,17 +130,22 @@ void loop() {
   int umidade = LeituraUmidade();
 
   if (statusSystem == 1){
-     if (modo == 0){
-      releControlHumidity(umidade);
+    if (modo == 0){
+//      releControlHumidity(umidade);
     }else if(modo == 1){
       releControlTime();
     }
   }
 
+  if(statusSystem == 0 ){
+    checkTimeIsUp();
+  }
+
   publishStateSystem();
-  OnValueSub.publish(umidadeLiga);
-  OffValueSub.publish(umidadeDesliga);
-  umidade_graph.publish(umidade);
+//  OnValueSub.publish(umidadeLiga);
+//  OffValueSub.publish(umidadeDesliga);
+//  umidade_graph.publish(umidade);
+  OnTimeSub.publish(tempoLigado);
   delay(10000);
 }
 
@@ -203,7 +216,7 @@ void OTAInit(){
    ArduinoOTA.setHostname("ESP SMART GARDEN");
 
   // No authentication by default
-   ArduinoOTA.setPassword("");
+   ArduinoOTA.setPassword("01042017");
 
   // Password can be set with it's md5 value as well
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
@@ -256,6 +269,8 @@ void initMQTT() {
   mqtt.subscribe(&OnValue);
   OffValue.setCallback(OffValue_callback);
   mqtt.subscribe(&OffValue);
+  OnTime.setCallback(OnTime_callback);
+  mqtt.subscribe(&OnTime);
   
 }
 
@@ -268,6 +283,7 @@ void rele_callback(char *data, uint16_t len) {
   if (state == "ON") {
     digitalWrite(rele01, LOW);
     digitalWrite(rele02, LOW);
+    saveTime();
     
   } else if(state == "OFF") {
     digitalWrite(rele01, HIGH);
@@ -322,6 +338,13 @@ void OffValue_callback(char *data, uint16_t len){
     EEPROM.write(2, atoi(state.c_str()));
     EEPROM.commit();
     EEPROM.end();  
+}
+
+void OnTime_callback (char *data, uint16_t len){
+  String state = data;
+
+  tempoLigado = atoi(state.c_str());
+  
 }
 
 /*************************** Demais implementações ************************************/
@@ -422,5 +445,29 @@ void publishStateSystem(){
   }
   if (statusSystem == 0){
       IOSub.publish("OFF");
+  }
+}
+
+void saveTime(){
+
+  horaLigou = timeClient.getHours();
+  minutoLigou = timeClient.getMinutes();
+}
+
+void checkTimeIsUp(){
+  int diferencaMinutos = 0;
+  
+  if (horaLigou != NULL && minutoLigou != NULL){
+    
+    if(horaLigou == timeClient.getHours()){
+      diferencaMinutos = timeClient.getMinutes() - minutoLigou;
+    }else if(timeClient.getHours() > horaLigou ){
+      diferencaMinutos = (60 - minutoLigou) + timeClient.getMinutes();
+    }
+   if(diferencaMinutos >= tempoLigado){
+      pumpOff();
+    }
+  }else{
+    pumpOff();
   }
 }
