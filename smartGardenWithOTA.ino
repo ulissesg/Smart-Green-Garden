@@ -30,7 +30,7 @@ WiFiClient client;
 
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 
-int statusSystem = 1;
+int statusSystem = 0;
 
 int rele01 = 16; // pino do rele
 int rele02 = 5;
